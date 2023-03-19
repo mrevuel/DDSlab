@@ -1,57 +1,143 @@
 ---
-title: "Analysis of Qualys KDB"
+title: "Supervised Learning"
 author: "Humbert Costas"
-date: "`r Sys.Date()`"
+date: "6/2/2022"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
 
-library(kableExtra)
+library("jsonlite", warn.conflicts = FALSE)
+library("ggplot2", warn.conflicts = FALSE)
+library("lattice", warn.conflicts = FALSE)
+library("caret", warn.conflicts = FALSE)
+library("gbm", warn.conflicts = FALSE)
+library("pROC", warn.conflicts = FALSE)
 
-raw.file = "../../data/qualys/latest.qkdb.xml.zip"
+set.seed(42)
 ```
 
-# Qualys KDB
+# Detección de ataques con aprendizaje supervisado
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam vitae erat dignissim, placerat nisi vitae, viverra ipsum. Etiam consectetur mattis pellentesque. Duis at porttitor eros. Morbi nisl eros, luctus efficitur dui ac, ultricies vulputate leo. Vestibulum accumsan, nunc id faucibus finibus, tellus ipsum venenatis odio, in luctus nisi lectus vel orci. Etiam pretium imperdiet lobortis. Vestibulum ut neque nec erat tempor laoreet et at erat. Nam varius dolor non neque maximus, ut egestas enim ultrices. Integer porttitor, leo id ornare pharetra, tellus erat cursus metus, eget rutrum augue dui at justo.
+El siguiente ejercicio consiste en crear un modelo entrenado capaz de detectar ataques a partir de logs de un firewall. Para este propósito, se realizará una prueba de concepto con una pequeña muestra de logs previamente etiquetados como tráfico normal o ataque.
 
-```{r read_raw}
-doc <- xml2::read_xml(raw.file)
+## Data sets
 
-kdb <- data.frame(qid = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/QID")),
-                  title = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/TITLE")),
-                  vuln_type = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/VULN_TYPE")),
-                  category = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/CATEGORY")),
-                  severity = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/SEVERITY_LEVEL")),
-                  patchable = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/PATCHABLE")),
-                  published = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/LAST_SERVICE_MODIFICATION_DATETIME")),
-                  stringsAsFactors = FALSE)
-kdb$published <- as.POSIXct.POSIXlt(strptime(x = kdb$published, format = "%Y-%m-%dT%TZ"))
+Se proporcionan los siguentes archivos:
 
-kable(head(kdb)) %>% kable_styling()
+-   features.csv
+-   events.csv
+
+```{r tidy_data, echo=FALSE}
+events <- read.csv("../../../data/DDSml/raw/events_sample.csv")
+features <- read.csv("../../../data/DDSml/raw/features.csv")
 ```
 
-## Including Cybersecurity Standards
+### Events analysis
 
-Aliquam erat volutpat. Proin eget arcu et erat viverra eleifend. Quisque suscipit interdum blandit. Cras suscipit, nibh at mattis varius, purus massa pretium est, a malesuada felis velit sed leo. Nam quis malesuada orci. Aliquam consectetur molestie purus in rutrum. Curabitur purus libero, blandit vitae tempus quis, pharetra sit amet ex. Integer ligula lorem, gravida ac dui rutrum, sodales egestas augue. Etiam bibendum risus elit, quis dictum erat tristique id. Sed vulputate, turpis vel commodo molestie, lacus dui varius velit, vitae maximus tellus neque in urna. Donec non purus elementum, condimentum mi eu, semper dolor. Suspendisse malesuada turpis vel libero blandit varius. Cras rhoncus facilisis nunc sed efficitur. Suspendisse suscipit vel dui ut semper. Donec pellentesque tincidunt tincidunt.
+```{r events_stats, echo=FALSE}
+events$srcip <- NULL
 
-```{r add_cve, echo=FALSE}
+
+install.packages("ggplot2")
+library(ggplot2)
+
+x <- c(1, 2, 3, 4, 5)
+y <- c(2, 4, 6, 8, 10)
+
+df <- data.frame(x, y)
+
+ggplot(df, aes(x, y)) +
+  geom_point()
 
 
 ```
 
-```{r add_cwe, echo=FALSE}
+### Data enrichment
 
+```{r data_enrich, echo=FALSE}
+events <- read.csv("events_sample.csv", stringsAsFactors = FALSE)
+events <- read.csv("features.csv", stringsAsFactors = FALSE)
 
 ```
 
-```{r add_cpe, echo=FALSE}
+## Feature engineering
 
+```{r feat_eng, echo=FALSE}
+# El modelo requiere nombres de columna simples y features numericas o factor
+names(events) <- stringr::str_replace_all(names(events), "_", "")
+events <- as.data.frame(unclass(events), stringsAsFactors = TRUE)
 
+# Etiquetamos la columna Label con valores categoricos
+events$Label <- ifelse(events$Label == 1, "ATTACK", "NORMAL")
+events$Label <- as.factor(events$Label)
+
+outcomeName <- 'Label'
+predictorsNames <- names(events)[names(events) != outcomeName]
+
+prop.table(table(events$Label))
+```
+
+### Create train and test data sets
+
+```{r train_test, echo=FALSE}
+splitIndex <- createDataPartition(events[,outcomeName], p = .75, list = FALSE, times = 1)
+trainDF <- events[ splitIndex,]
+testDF  <- events[-splitIndex,]
+
+```
+
+### Model definition
+
+```{r model_config, echo=FALSE}
+objControl <- trainControl(method = 'cv', 
+                           number = 3, 
+                           returnResamp = 'none', 
+                           summaryFunction = twoClassSummary, 
+                           classProbs = TRUE)
+```
+
+### Train model
+
+```{r model_train, echo=FALSE}
+objModel <- train(trainDF[,predictorsNames], trainDF[,outcomeName], 
+                  method='gbm', 
+                  trControl=objControl,  
+                  metric = "ROC",
+                  preProc = c("center", "scale"))
+summary(objModel)
+```
+
+### Test model
+
+```{r model_test, echo=FALSE}
+predictions <- predict(object = objModel, testDF[, predictorsNames], type = 'raw')
+head(predictions)
+
+```
+
+## Evaluate model
+
+```{r model_eval, echo=FALSE}
+print(postResample(pred=predictions, obs=as.factor(testDF[,outcomeName])))
+
+```
+
+```{r predic_prob}
+# probabilites 
+predictions <- predict(object=objModel, testDF[,predictorsNames], type='prob')
+auc <- roc(ifelse(testDF[,outcomeName]=="ATTACK",1,0), predictions[[2]])
+print(auc$auc)
+```
+
+```{r var_importance}
+plot(varImp(objModel,scale=F))
 ```
 
 ## Conclusion
 
-Ut finibus, metus in tristique blandit, purus quam vulputate sapien, vitae rhoncus nunc orci et leo. Duis id justo bibendum, molestie nulla eget, ullamcorper massa. Sed porttitor leo tellus, a tristique nisi tincidunt lobortis. Donec in orci imperdiet, lobortis lorem hendrerit, vestibulum dolor. Proin laoreet, orci at iaculis blandit, odio ligula commodo nunc, eu pulvinar justo tortor sed eros. Ut convallis condimentum purus, ac viverra neque maximus ac. Vestibulum consequat facilisis odio vel tempor.
+```{r conclusion, echo=FALSE}
+
+
+```
