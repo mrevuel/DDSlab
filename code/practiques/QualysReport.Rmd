@@ -9,6 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = FALSE)
 
 library(kableExtra)
+library(ggplot2)
 
 raw.file = "../../data/qualys/latest.qkdb.xml.zip"
 ```
@@ -38,17 +39,69 @@ kable(head(kdb)) %>% kable_styling()
 Aliquam erat volutpat. Proin eget arcu et erat viverra eleifend. Quisque suscipit interdum blandit. Cras suscipit, nibh at mattis varius, purus massa pretium est, a malesuada felis velit sed leo. Nam quis malesuada orci. Aliquam consectetur molestie purus in rutrum. Curabitur purus libero, blandit vitae tempus quis, pharetra sit amet ex. Integer ligula lorem, gravida ac dui rutrum, sodales egestas augue. Etiam bibendum risus elit, quis dictum erat tristique id. Sed vulputate, turpis vel commodo molestie, lacus dui varius velit, vitae maximus tellus neque in urna. Donec non purus elementum, condimentum mi eu, semper dolor. Suspendisse malesuada turpis vel libero blandit varius. Cras rhoncus facilisis nunc sed efficitur. Suspendisse suscipit vel dui ut semper. Donec pellentesque tincidunt tincidunt.
 
 ```{r add_cve, echo=FALSE}
+cve <- data.frame(cve = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/CVE")),
+                  title = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/TITLE")),
+                  vuln_type = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/VULN_TYPE")),
+                  category = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/CATEGORY")),
+                  severity = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/SEVERITY_LEVEL")),
+                  patchable = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/PATCHABLE")),
+                  published = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/LAST_SERVICE_MODIFICATION_DATETIME")),
+                  stringsAsFactors = FALSE)
+cve$published <- as.POSIXct.POSIXlt(strptime(x = cve$published, format = "%Y-%m-%dT%TZ"))
 
+kable(head(cve)) %>% kable_styling()
+
+# Crear tabla de frecuencias
+tabla_frecuencias <- table(cve$category)
+
+# Crear dataframe
+datos <- data.frame(category = names(tabla_frecuencias), value = tabla_frecuencias)
+
+# Grafico de barras agrupado por categoria
+ggplot(datos, aes(x=category, y=value, fill=category)) + 
+  geom_bar(stat="identity") +
+  labs(title = "Nº Vulnerabilidades de cada Categoria", x = "categorias", y = "Frecuencia de categorías")
 
 ```
 
 ```{r add_cwe, echo=FALSE}
+cwe <- data.frame(cve = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/CWE")),
+                  title = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/TITLE")),
+                  vuln_type = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/VULN_TYPE")),
+                  category = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/CATEGORY")),
+                  severity = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/SEVERITY_LEVEL")),
+                  patchable = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/PATCHABLE")),
+                  published = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/LAST_SERVICE_MODIFICATION_DATETIME")),
+                  stringsAsFactors = FALSE)
+cwe$published <- as.POSIXct.POSIXlt(strptime(x = cwe$published, format = "%Y-%m-%dT%TZ"))
 
+kable(head(cwe)) %>% kable_styling()
+
+# Crear tabla de frecuencias
+tabla_frecuencias <- table(cwe$severity)
+
+# Crear dataframe
+datos <- data.frame(category = names(tabla_frecuencias), value = tabla_frecuencias)
+
+# Grafico de barras agrupado por categoria
+ggplot(datos, aes(x=category, y=value, fill=category)) + 
+  geom_bar(stat="identity") +
+  labs(title = "Nº Vulnerabilidades por severidad", x = "severidad", y = "Frecuencia de la severidad")
 
 ```
 
 ```{r add_cpe, echo=FALSE}
+cpe <- data.frame(cve = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/CPE")),
+                  title = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/TITLE")),
+                  vuln_type = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/VULN_TYPE")),
+                  category = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/CATEGORY")),
+                  severity = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/SEVERITY_LEVEL")),
+                  patchable = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/PATCHABLE")),
+                  published = rvest::html_text(rvest::html_elements(doc, xpath = "//VULN/LAST_SERVICE_MODIFICATION_DATETIME")),
+                  stringsAsFactors = FALSE)
+cve$published <- as.POSIXct.POSIXlt(strptime(x = cve$published, format = "%Y-%m-%dT%TZ"))
 
+kable(head(cpe)) %>% kable_styling()
 
 ```
 
